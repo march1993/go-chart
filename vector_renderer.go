@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"strings"
+	"sync"
 
 	"golang.org/x/image/font"
 
@@ -189,14 +190,25 @@ func (vr *vectorRenderer) Text(body string, x, y int) {
 	vr.c.Text(x, y, body, vr.s.GetTextOptions())
 }
 
+// cache all the font faces
+var faceMap = map[*truetype.Font]font.Face{}
+var faceMapMutex = sync.Mutex{}
+
 // MeasureText uses the truetype font drawer to measure the width of text.
 func (vr *vectorRenderer) MeasureText(body string) (box Box) {
-	if vr.s.GetFont() != nil {
-		vr.fc = &font.Drawer{
-			Face: truetype.NewFace(vr.s.GetFont(), &truetype.Options{
+	if f := vr.s.GetFont(); f != nil {
+		faceMapMutex.Lock()
+		defer faceMapMutex.Unlock()
+
+		if faceMap[f] == nil {
+			faceMap[f] = truetype.NewFace(vr.s.GetFont(), &truetype.Options{
 				DPI:  vr.dpi,
 				Size: vr.s.FontSize,
-			}),
+			})
+		}
+
+		vr.fc = &font.Drawer{
+			Face: faceMap[f],
 		}
 		w := vr.fc.MeasureString(body).Ceil()
 
